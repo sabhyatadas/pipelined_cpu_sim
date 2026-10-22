@@ -1,0 +1,18 @@
+{
+  "num_cores": 10,
+  "register_bits": 64,
+  "num_registers": 32,
+  "cache_size": 1024,
+  "cache_line_size": 16,
+  "cache_associativity": 2,
+  "l1_hit_time": 1,
+  "l2_size": 4096,
+  "l2_line_size": 16,
+  "l2_associativity": 4,
+  "l2_hit_time": 10,
+  "mem_penalty": 50,
+  "memory_size": 65536,
+  "pipeline_stages": 5,
+  "max_cycles": 50000,
+  "scheduler_mode": "threaded"
+}
