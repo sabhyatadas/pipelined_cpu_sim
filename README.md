@@ -318,9 +318,25 @@ Stores 4 ASCII values to memory, pushes them onto the stack in order, pops them 
 
 ## Roadmap
 
+### ✅ Pipeline & ISA
 - [ ] Branch predictor (2-bit saturating counter) to reduce flush rate
 - [ ] Out-of-order execution skeleton (reorder buffer + reservation stations)
-- [ ] Cache coherence protocol (MESI) for the shared L2
-- [ ] Matplotlib visualisation of per-core CPI and AMAT
 - [ ] ELF-like binary loader so external programs can be run without recompiling
 - [ ] Web-based pipeline visualiser (step-through mode)
+
+### 🧠 Cache & Memory Hierarchies
+- [ ] **L3 cache layer** — Add a shared L3 (e.g. 16 KB, 8-way) between the shared L2 and main memory; extend AMAT formula to a 3-level model (`t_L1 + m_L1×(t_L2 + m_L2×(t_L3 + m_L3×t_mem))`) and benchmark how L3 size/associativity affects hit rates and CPI across workloads
+- [ ] **Cache hierarchy design explorer** — Sweep L1/L2/L3 size configurations programmatically and plot the Pareto frontier of AMAT vs. silicon area cost, reproducing the kind of design-space analysis done in real CPU architecture teams
+- [ ] Cache coherence protocol (MESI) for the shared L2/L3 in multicore mode
+
+### ⚡ GPU & Systolic Architecture
+- [ ] **Systolic array matrix multiplier** — Model an N×N systolic array (as used in Google TPUs and NVIDIA tensor cores) where each PE does a MAC every cycle; data flows in a wave across the array with no global interconnect; simulate the dataflow schedule (weight-stationary vs. output-stationary) and report utilisation and effective FLOP/s
+- [ ] **GPU architecture simulator** — Extend the multi-core model into a SIMT (Single Instruction Multiple Threads) GPU: warp scheduler, warp-level divergence handling, shared memory scratchpad per SM, and a global memory coalescing model; compare throughput vs. the CPU pipeline on the matrix multiply benchmark
+
+### 🤖 RL-Driven Cache Scheduler
+- [ ] **Reinforcement Learning cache arbitration agent** — Replace the fixed round-robin L2 access order with a tabular Q-learning agent (pure Python, no ML libraries):
+  - **State**: per-core stall count, L1 miss rate, and pipeline occupancy sampled each scheduling quantum
+  - **Action**: which core gets L2 priority this quantum (discrete, one-hot over 10 cores)
+  - **Reward**: negative of total pipeline stalls incurred during the quantum (fewer stalls = higher reward)
+  - **Learning**: ε-greedy exploration decaying over training episodes; Q-table updated with `Q(s,a) ← Q(s,a) + α(r + γ·max Q(s',·) − Q(s,a))`
+  - **Deliverable**: side-by-side graph — Round-Robin vs. RL agent — plotting total cycles to completion on skewed workloads (one memory-heavy core + nine compute-heavy cores); expect the RL agent to converge on a policy that drains the bottlenecked core's miss queue first, reducing overall wall-clock cycles
