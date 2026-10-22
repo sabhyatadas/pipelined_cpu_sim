@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    svg text { user-select: none; }
+
+    .node-box {
+      transition: filter 0.15s ease, transform 0.15s ease;
+      cursor: pointer;
+    }
+    .node-box:hover { filter: brightness(1.18); transform: scale(1.015); transform-origin: center; }
+
+    .tooltip {
+      position: fixed;
+      background: var(--card);
+      color: var(--foreground);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      max-width: 280px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.18s ease;
+      z-index: 9999;
+      line-height: 1.5;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.18);
+    }
+    .tooltip.visible { opacity: 1; }
+
+    .legend-dot {
+      display: inline-block;
+      width: 12px; height: 12px;
+      border-radius: 3px;
+      margin-right: 5px;
+      vertical-align: middle;
+    }
+
+    @keyframes flow {
+      0%   { stroke-dashoffset: 24; }
+      100% { stroke-dashoffset: 0;  }
+    }
+    .animated-arrow { animation: flow 0.7s linear infinite; }
+  </style>
+</head>
+<body class="bg-[var(--background)] text-[var(--foreground)] antialiased p-4">
+
+<div class="tooltip" id="tooltip"></div>
+
+<div class="mb-4 flex items-start justify-between flex-wrap gap-3">
+  <div>
+    <h1 class="text-base font-bold text-[var(--foreground)]">10-Core 64-bit HPC CPU Simulator — System Architecture</h1>
+    <p class="text-xs text-[var(--muted-foreground)] mt-0.5">Hover any component for details. Click a layer tab to highlight it.</p>
+  </div>
+  <div class="flex flex-wrap gap-2 text-xs text-[var(--muted-foreground)]">
+    <span><span class="legend-dot" style="background:#6366f1"></span>Scheduler</span>
+    <span><span class="legend-dot" style="background:#0ea5e9"></span>CPU Core / Pipeline</span>
+    <span><span class="legend-dot" style="background:#10b981"></span>ISA / Assembler</span>
+    <span><span class="legend-dot" style="background:#f59e0b"></span>Cache / Memory</span>
+    <span><span class="legend-dot" style="background:#f43f5e"></span>Metrics / Output</span>
+  </div>
+</div>
+
+<svg id="diagram" viewBox="0 0 920 780" width="100%" xmlns="http://www.w3.org/2000/svg" style="max-height:78vh;">
+  <defs>
+    <marker id="arr" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="var(--muted-foreground)" opacity="0.7"/>
+    </marker>
+    <marker id="arr-blue" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#0ea5e9" opacity="0.9"/>
+    </marker>
+    <marker id="arr-amber" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#f59e0b" opacity="0.9"/>
+    </marker>
+    <marker id="arr-rose" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#f43f5e" opacity="0.9"/>
+    </marker>
+    <marker id="arr-green" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#10b981" opacity="0.9"/>
+    </marker>
+    <filter id="glow">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- ───────────── BACKGROUND BANDS ───────────── -->
+  <rect x="8" y="8"   width="904" height="60"  rx="8" fill="#6366f1" opacity="0.09"/>
+  <rect x="8" y="78"  width="904" height="60"  rx="8" fill="#10b981" opacity="0.08"/>
+  <rect x="8" y="148" width="904" height="278" rx="8" fill="#0ea5e9" opacity="0.07"/>
+  <rect x="8" y="436" width="904" height="172" rx="8" fill="#f59e0b" opacity="0.07"/>
+  <rect x="8" y="618" width="904" height="140" rx="8" fill="#f43f5e" opacity="0.07"/>
+
+  <!-- band labels -->
+  <text x="20" y="44"  font-size="10" fill="#6366f1" opacity="0.85" font-weight="600">SCHEDULER LAYER</text>
+  <text x="20" y="114" font-size="10" fill="#10b981" opacity="0.85" font-weight="600">ISA / ASSEMBLER LAYER</text>
+  <text x="20" y="184" font-size="10" fill="#0ea5e9" opacity="0.85" font-weight="600">5-STAGE PIPELINE (per core)</text>
+  <text x="20" y="474" font-size="10" fill="#f59e0b" opacity="0.85" font-weight="600">2-LEVEL CACHE HIERARCHY</text>
+  <text x="20" y="658" font-size="10" fill="#f43f5e" opacity="0.85" font-weight="600">PERFORMANCE METRICS</text>
+
+  <!-- ═══════════════════════════════════════════════
+       LAYER 1 – SCHEDULER
+  ══════════════════════════════════════════════════ -->
+
+  <!-- main.py -->
+  <g class="node-box" data-tip="<b>main.py</b><br/>Entry point. Reads config.json, assembles workloads, spawns 10 Core objects, selects scheduler, and calls gather_metrics + print_report.">
+    <rect x="30" y="16" width="120" height="42" rx="7" fill="#6366f1" opacity="0.9" stroke="#a5b4fc" stroke-width="1.2"/>
+    <text x="90" y="33" text-anchor="middle" font-size="11" font-weight="700" fill="white">main.py</text>
+    <text x="90" y="48" text-anchor="middle" font-size="9" fill="#c7d2fe">Entry point</text>
+  </g>
+
+  <!-- config.json -->
+  <g class="node-box" data-tip="<b>config.json</b><br/>Defines hardware parameters: num_cores=10, register_bits=64, cache sizes, L2 latency, mem_penalty=50, max_cycles, scheduler_mode.">
+    <rect x="185" y="16" width="120" height="42" rx="7" fill="#6366f1" opacity="0.8" stroke="#a5b4fc" stroke-width="1.2"/>
+    <text x="245" y="33" text-anchor="middle" font-size="11" font-weight="700" fill="white">config.json</text>
+    <text x="245" y="48" text-anchor="middle" font-size="9" fill="#c7d2fe">Hardware params</text>
+  </g>
+
+  <!-- ThreadedScheduler -->
+  <g class="node-box" data-tip="<b>ThreadedScheduler</b><br/>Runs each of the 10 cores as a Python threading.Thread. Constrained by the GIL; best for I/O-bound and demo workloads. Returns max(c.cycles).">
+    <rect x="430" y="16" width="150" height="42" rx="7" fill="#4f46e5" opacity="0.9" stroke="#a5b4fc" stroke-width="1.2"/>
+    <text x="505" y="33" text-anchor="middle" font-size="11" font-weight="700" fill="white">ThreadedScheduler</text>
+    <text x="505" y="48" text-anchor="middle" font-size="9" fill="#c7d2fe">threading.Thread × 10</text>
+  </g>
+
+  <!-- MultiprocessScheduler -->
+  <g class="node-box" data-tip="<b>MultiprocessScheduler</b><br/>Spawns one OS process per core via multiprocessing.Process. Bypasses the GIL for true parallelism. Results sent back via multiprocessing.Queue.">
+    <rect x="610" y="16" width="165" height="42" rx="7" fill="#4338ca" opacity="0.9" stroke="#a5b4fc" stroke-width="1.2"/>
+    <text x="692" y="33" text-anchor="middle" font-size="11" font-weight="700" fill="white">MultiprocessScheduler</text>
+    <text x="692" y="48" text-anchor="middle" font-size="9" fill="#c7d2fe">multiprocessing.Process × 10</text>
+  </g>
+
+  <!-- arrows main→schedulers -->
+  <line x1="150" y1="37" x2="428" y2="37" stroke="var(--muted-foreground)" stroke-width="1.4" marker-end="url(#arr)" stroke-dasharray="5,3" class="animated-arrow"/>
+  <line x1="150" y1="37" x2="608" y2="37" stroke="var(--muted-foreground)" stroke-width="1.4" marker-end="url(#arr)" stroke-dasharray="5,3" class="animated-arrow"/>
+  <!-- config to main -->
+  <line x1="185" y1="37" x2="152" y2="37" stroke="var(--muted-foreground)" stroke-width="1.2" marker-end="url(#arr)"/>
+
+  <!-- ═══════════════════════════════════════════════
+       LAYER 2 – ASSEMBLER / ISA
+  ══════════════════════════════════════════════════ -->
+
+  <!-- assembler.py -->
+  <g class="node-box" data-tip="<b>assembler.py</b><br/>Two-pass assembler. Pass 1: strip comments, build label→address table. Pass 2: encode each mnemonic to a 32-bit packed integer using bitmasks (R-type, I-type, J-type). Supports 31 opcodes.">
+    <rect x="30" y="86" width="135" height="42" rx="7" fill="#059669" opacity="0.9" stroke="#6ee7b7" stroke-width="1.2"/>
+    <text x="97" y="103" text-anchor="middle" font-size="11" font-weight="700" fill="white">assembler.py</text>
+    <text x="97" y="118" text-anchor="middle" font-size="9" fill="#d1fae5">2-pass, 32-bit encode</text>
+  </g>
+
+  <!-- demo_programs.py -->
+  <g class="node-box" data-tip="<b>demo_programs.py</b><br/>3 benchmark generators:<br/>• Recursive Fibonacci (CALL/RET/PUSH/POP/CMP/JL)<br/>• In-memory Bubble Sort (LD/ST/LDI/STI + CMP/JL loops)<br/>• String Reverse via stack (PUSH/POP)">
+    <rect x="200" y="86" width="155" height="42" rx="7" fill="#047857" opacity="0.9" stroke="#6ee7b7" stroke-width="1.2"/>
+    <text x="277" y="103" text-anchor="middle" font-size="11" font-weight="700" fill="white">demo_programs.py</text>
+    <text x="277" y="118" text-anchor="middle" font-size="9" fill="#d1fae5">rec. Fibonacci · BubbleSort · Reverse</text>
+  </g>
+
+  <!-- ISA box -->
+  <g class="node-box" data-tip="<b>ISA (31 instructions)</b><br/>ALU: LOAD, MOV, ADD, ADDI, SUB, MUL, DIV, AND, OR, XOR, SHL, SHR<br/>Memory: LD, ST, LDI, STI<br/>Stack: PUSH, POP, CALL, RET<br/>Flags: CMP, CMPI, JE, JNE, JL, JGE, JMP, JNZ<br/>System: PRINT, NOP, HALT">
+    <rect x="400" y="86" width="155" height="42" rx="7" fill="#065f46" opacity="0.9" stroke="#6ee7b7" stroke-width="1.2"/>
+    <text x="477" y="103" text-anchor="middle" font-size="11" font-weight="700" fill="white">ISA (31 opcodes)</text>
+    <text x="477" y="118" text-anchor="middle" font-size="9" fill="#d1fae5">ALU·Mem·Stack·Flags·Ctrl</text>
+  </g>
+
+  <!-- 32-bit encoding -->
+  <g class="node-box" data-tip="<b>32-bit Instruction Format</b><br/>R-type: opcode[31:26] | rd[25:21] | rs1[20:16] | rs2[15:11]<br/>I-type: opcode[31:26] | rd[25:21] | rs1[20:16] | imm16[15:0]<br/>J-type: opcode[31:26] | target21[20:0]<br/>Decoded at ID stage with bitwise masks.">
+    <rect x="590" y="86" width="155" height="42" rx="7" fill="#064e3b" opacity="0.85" stroke="#6ee7b7" stroke-width="1.2"/>
+    <text x="667" y="103" text-anchor="middle" font-size="11" font-weight="700" fill="white">32-bit Packing</text>
+    <text x="667" y="118" text-anchor="middle" font-size="9" fill="#d1fae5">R/I/J types · bitmask decode</text>
+  </g>
+
+  <!-- arrows asm layer -->
+  <line x1="165" y1="107" x2="198" y2="107" stroke="#10b981" stroke-width="1.3" marker-end="url(#arr-green)"/>
+  <line x1="355" y1="107" x2="398" y2="107" stroke="#10b981" stroke-width="1.3" marker-end="url(#arr-green)"/>
+  <line x1="555" y1="107" x2="588" y2="107" stroke="#10b981" stroke-width="1.3" marker-end="url(#arr-green)"/>
+
+  <!-- assembler to pipeline (down arrow) -->
+  <line x1="97" y1="128" x2="97" y2="154" stroke="#10b981" stroke-width="1.3" marker-end="url(#arr-green)"/>
+
+  <!-- ═══════════════════════════════════════════════
+       LAYER 3 – 5-STAGE PIPELINE
+  ══════════════════════════════════════════════════ -->
+
+  <!-- Registers/RF -->
+  <g class="node-box" data-tip="<b>Register File</b><br/>32 × 64-bit general-purpose registers per core (R0..R31). R31 = SP (Stack Pointer). Values are 64-bit unsigned with MASK = (1&lt;&lt;64)−1 truncation.">
+    <rect x="30" y="158" width="120" height="42" rx="7" fill="#0369a1" opacity="0.85" stroke="#7dd3fc" stroke-width="1.2"/>
+    <text x="90" y="175" text-anchor="middle" font-size="11" font-weight="700" fill="white">Register File</text>
+    <text x="90" y="190" text-anchor="middle" font-size="9" fill="#bae6fd">32 × 64-bit + SP(R31)</text>
+  </g>
+
+  <!-- Flags -->
+  <g class="node-box" data-tip="<b>Condition Flags</b><br/>ZF (Zero Flag): set when CMP/CMPI result is equal.<br/>SF (Sign Flag): set when rs1 &lt; rs2.<br/>Used by JE, JNE, JL, JGE.">
+    <rect x="170" y="158" width="100" height="42" rx="7" fill="#0c4a6e" opacity="0.85" stroke="#7dd3fc" stroke-width="1.2"/>
+    <text x="220" y="175" text-anchor="middle" font-size="11" font-weight="700" fill="white">Flags</text>
+    <text x="220" y="190" text-anchor="middle" font-size="9" fill="#bae6fd">ZF · SF</text>
+  </g>
+
+  <!-- IF stage -->
+  <g class="node-box" data-tip="<b>IF — Instruction Fetch</b><br/>Reads program[PC] (32-bit packed int). Queries L1 cache for the instruction address (PC×4). On branch: flushes IF/ID pipeline registers. Increments PC.">
+    <rect x="30" y="220" width="130" height="48" rx="7" fill="#0284c7" opacity="0.9" stroke="#38bdf8" stroke-width="1.5"/>
+    <text x="95" y="240" text-anchor="middle" font-size="12" font-weight="700" fill="white">IF</text>
+    <text x="95" y="256" text-anchor="middle" font-size="9" fill="#e0f2fe">Instruction Fetch</text>
+    <text x="95" y="263" text-anchor="middle" font-size="8" fill="#bae6fd">program[PC] → cache(PC×4)</text>
+  </g>
+
+  <!-- IF/ID register -->
+  <g class="node-box" data-tip="<b>IF/ID Pipeline Register</b><br/>Holds: {pc, raw_word (32-bit)}. Flushed to None on taken branch/call/ret. Also held on load-use stall.">
+    <rect x="172" y="228" width="50" height="32" rx="5" fill="#075985" opacity="0.9" stroke="#38bdf8" stroke-width="1"/>
+    <text x="197" y="245" text-anchor="middle" font-size="9" font-weight="600" fill="white">IF/ID</text>
+    <text x="197" y="256" text-anchor="middle" font-size="7.5" fill="#bae6fd">reg</text>
+  </g>
+
+  <!-- ID stage -->
+  <g class="node-box" data-tip="<b>ID — Instruction Decode</b><br/>Decodes 32-bit word via bitmasks into {op, rd, rs1, rs2, imm, target}. Reads register file. Detects load-use hazard: if EX stage has a memory-read pending and ID depends on its rd → insert 1-cycle bubble stall.">
+    <rect x="234" y="220" width="130" height="48" rx="7" fill="#0284c7" opacity="0.9" stroke="#38bdf8" stroke-width="1.5"/>
+    <text x="299" y="240" text-anchor="middle" font-size="12" font-weight="700" fill="white">ID</text>
+    <text x="299" y="256" text-anchor="middle" font-size="9" fill="#e0f2fe">Decode + Hazard Detect</text>
+    <text x="299" y="263" text-anchor="middle" font-size="8" fill="#bae6fd">bitmask decode · load-use stall</text>
+  </g>
+
+  <!-- ID/EX register -->
+  <g class="node-box" data-tip="<b>ID/EX Pipeline Register</b><br/>Holds: {pc, op, rd, rs1, rs2, val1, val2, imm, target, reg_write, is_mem_read, is_mem_write, uses_rs1, uses_rs2, ...}. Cleared to bubble on stall.">
+    <rect x="376" y="228" width="50" height="32" rx="5" fill="#075985" opacity="0.9" stroke="#38bdf8" stroke-width="1"/>
+    <text x="401" y="245" text-anchor="middle" font-size="9" font-weight="600" fill="white">ID/EX</text>
+    <text x="401" y="256" text-anchor="middle" font-size="7.5" fill="#bae6fd">reg</text>
+  </g>
+
+  <!-- EX stage -->
+  <g class="node-box" data-tip="<b>EX — Execute / ALU</b><br/>Forwarding Unit checks EX/MEM and MEM/WB for rs1/rs2 matches before ALU. Evaluates 31 ALU operations. For branches: resolves taken/not-taken; if taken flushes IF+ID. Sets branch_taken and branch_target.">
+    <rect x="438" y="220" width="130" height="48" rx="7" fill="#0284c7" opacity="0.9" stroke="#38bdf8" stroke-width="1.5"/>
+    <text x="503" y="240" text-anchor="middle" font-size="12" font-weight="700" fill="white">EX</text>
+    <text x="503" y="256" text-anchor="middle" font-size="9" fill="#e0f2fe">ALU + Forwarding</text>
+    <text x="503" y="263" text-anchor="middle" font-size="8" fill="#bae6fd">bypass EX/MEM · MEM/WB</text>
+  </g>
+
+  <!-- EX/MEM register -->
+  <g class="node-box" data-tip="<b>EX/MEM Pipeline Register</b><br/>Holds: {pc, op, rd, reg_write, alu_result, mem_addr, store_val, is_mem_read, is_mem_write, is_print, print_val, is_halt}.">
+    <rect x="580" y="228" width="55" height="32" rx="5" fill="#075985" opacity="0.9" stroke="#38bdf8" stroke-width="1"/>
+    <text x="607" y="245" text-anchor="middle" font-size="9" font-weight="600" fill="white">EX/MEM</text>
+    <text x="607" y="256" text-anchor="middle" font-size="7.5" fill="#bae6fd">reg</text>
+  </g>
+
+  <!-- MEM stage -->
+  <g class="node-box" data-tip="<b>MEM — Memory Access</b><br/>For loads: calls memory.read(mem_addr) → returns (val, latency). For stores: calls memory.write(mem_addr, val). Otherwise passes alu_result through. Triggers L1 → L2 → main memory hierarchy.">
+    <rect x="647" y="220" width="130" height="48" rx="7" fill="#0284c7" opacity="0.9" stroke="#38bdf8" stroke-width="1.5"/>
+    <text x="712" y="240" text-anchor="middle" font-size="12" font-weight="700" fill="white">MEM</text>
+    <text x="712" y="256" text-anchor="middle" font-size="9" fill="#e0f2fe">Memory Access</text>
+    <text x="712" y="263" text-anchor="middle" font-size="8" fill="#bae6fd">read/write → cache hierarchy</text>
+  </g>
+
+  <!-- MEM/WB register -->
+  <g class="node-box" data-tip="<b>MEM/WB Pipeline Register</b><br/>Holds: {pc, op, rd, reg_write, write_data, is_print, print_val, is_halt}. write_data is either alu_result or mem_load result.">
+    <rect x="789" y="228" width="55" height="32" rx="5" fill="#075985" opacity="0.9" stroke="#38bdf8" stroke-width="1"/>
+    <text x="816" y="245" text-anchor="middle" font-size="9" font-weight="600" fill="white">MEM/WB</text>
+    <text x="816" y="256" text-anchor="middle" font-size="7.5" fill="#bae6fd">reg</text>
+  </g>
+
+  <!-- WB stage -->
+  <g class="node-box" data-tip="<b>WB — Write-Back</b><br/>Writes write_data to registers[rd] if reg_write. Appends to core.output if is_print. Sets halted if is_halt. Increments instructions counter.">
+    <rect x="30" y="302" width="130" height="48" rx="7" fill="#0284c7" opacity="0.9" stroke="#38bdf8" stroke-width="1.5"/>
+    <text x="95" y="322" text-anchor="middle" font-size="12" font-weight="700" fill="white">WB</text>
+    <text x="95" y="338" text-anchor="middle" font-size="9" fill="#e0f2fe">Write Back</text>
+    <text x="95" y="345" text-anchor="middle" font-size="8" fill="#bae6fd">reg[rd] = write_data</text>
+  </g>
+
+  <!-- pipeline stage arrows -->
+  <line x1="160" y1="244" x2="170" y2="244" stroke="#0ea5e9" stroke-width="1.5" marker-end="url(#arr-blue)"/>
+  <line x1="222" y1="244" x2="232" y2="244" stroke="#0ea5e9" stroke-width="1.5" marker-end="url(#arr-blue)"/>
+  <line x1="364" y1="244" x2="374" y2="244" stroke="#0ea5e9" stroke-width="1.5" marker-end="url(#arr-blue)"/>
+  <line x1="426" y1="244" x2="436" y2="244" stroke="#0ea5e9" stroke-width="1.5" marker-end="url(#arr-blue)"/>
+  <line x1="568" y1="244" x2="578" y2="244" stroke="#0ea5e9" stroke-width="1.5" marker-end="url(#arr-blue)"/>
+  <line x1="635" y1="244" x2="645" y2="244" stroke="#0ea5e9" stroke-width="1.5" marker-end="url(#arr-blue)"/>
+  <line x1="777" y1="244" x2="787" y2="244" stroke="#0ea5e9" stroke-width="1.5" marker-end="url(#arr-blue)"/>
+  <!-- MEM/WB wraps around back to WB -->
+  <path d="M844 260 Q880 262 880 340 Q880 395 160 325 Q95 325 95 352" fill="none" stroke="#0ea5e9" stroke-width="1.4" marker-end="url(#arr-blue)" stroke-dasharray="5,3"/>
+
+  <!-- Forwarding bypass arcs (EX→EX, MEM→EX) -->
+  <path d="M503 268 Q503 295 425 295 Q401 295 401 262" fill="none" stroke="#fbbf24" stroke-width="1.3" stroke-dasharray="4,2" marker-end="url(#arr-amber)" opacity="0.85"/>
+  <path d="M712 268 Q712 303 435 303 Q401 303 401 262" fill="none" stroke="#fbbf24" stroke-width="1.3" stroke-dasharray="4,2" marker-end="url(#arr-amber)" opacity="0.7"/>
+  <text x="500" y="294" font-size="8" fill="#fbbf24" opacity="0.85" text-anchor="middle">Fwd EX/MEM→EX</text>
+  <text x="570" y="311" font-size="8" fill="#fbbf24" opacity="0.7" text-anchor="middle">Fwd MEM/WB→EX</text>
+
+  <!-- Branch flush arc -->
+  <path d="M503 220 Q503 197 299 197 Q160 197 95 220" fill="none" stroke="#f43f5e" stroke-width="1.4" stroke-dasharray="5,2" marker-end="url(#arr-rose)" opacity="0.8"/>
+  <text x="295" y="194" font-size="8" fill="#f43f5e" opacity="0.8" text-anchor="middle">Branch flush (IF+ID cleared)</text>
+
+  <!-- Load-use stall note -->
+  <path d="M401 262 Q401 210 299 210" fill="none" stroke="#a78bfa" stroke-width="1.2" stroke-dasharray="4,2" marker-end="url(#arr)" opacity="0.75"/>
+  <text x="345" y="204" font-size="8" fill="#a78bfa" opacity="0.85" text-anchor="middle">load-use stall</text>
+
+  <!-- RF ↔ ID -->
+  <line x1="150" y1="175" x2="234" y2="244" stroke="#38bdf8" stroke-width="1.1" stroke-dasharray="3,2" opacity="0.6"/>
+  <!-- Flags ↔ EX -->
+  <line x1="220" y1="200" x2="438" y2="244" stroke="#7dd3fc" stroke-width="1.0" stroke-dasharray="3,2" opacity="0.5"/>
+
+  <!-- ═══════════════════════════════════════════════
+       stack/SP box
+  ══════════════════════════════════════════════════ -->
+  <g class="node-box" data-tip="<b>Stack (per-core)</b><br/>SP=R31, initialised to 4096 + core_id×512 so stacks never overlap. PUSH decrements SP by 8 then writes; POP reads then increments. CALL pushes PC+1 before branching.">
+    <rect x="30" y="370" width="130" height="42" rx="7" fill="#0c4a6e" opacity="0.85" stroke="#7dd3fc" stroke-width="1.2"/>
+    <text x="95" y="387" text-anchor="middle" font-size="11" font-weight="700" fill="white">Stack (SP=R31)</text>
+    <text x="95" y="402" text-anchor="middle" font-size="9" fill="#bae6fd">per-core · non-overlapping</text>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════
+       LAYER 4 – CACHE HIERARCHY
+  ══════════════════════════════════════════════════ -->
+
+  <!-- L1 -->
+  <g class="node-box" data-tip="<b>L1 Cache (Private per core)</b><br/>Size: 1 KB | Line: 16B | 2-way set-associative | 32 sets<br/>Hit time: 1 cycle<br/>On miss → check L2. Tracks hits and misses. Write-through on stores.">
+    <rect x="30" y="444" width="150" height="52" rx="7" fill="#b45309" opacity="0.9" stroke="#fcd34d" stroke-width="1.3"/>
+    <text x="105" y="464" text-anchor="middle" font-size="11" font-weight="700" fill="white">L1 Cache (Private)</text>
+    <text x="105" y="478" text-anchor="middle" font-size="9" fill="#fef3c7">1 KB · 2-way · 1-cycle</text>
+    <text x="105" y="489" text-anchor="middle" font-size="8" fill="#fde68a">per core · 32 sets · 16B lines</text>
+  </g>
+
+  <!-- L2 -->
+  <g class="node-box" data-tip="<b>L2 Cache (Shared across cores)</b><br/>Size: 4 KB | Line: 16B | 4-way set-associative | 64 sets<br/>Hit time: 10 cycles<br/>L1 miss → L2 probe → if hit: allocate to L1 and return. If L2 miss → main memory (50-cycle penalty).">
+    <rect x="220" y="444" width="155" height="52" rx="7" fill="#92400e" opacity="0.9" stroke="#fcd34d" stroke-width="1.3"/>
+    <text x="297" y="464" text-anchor="middle" font-size="11" font-weight="700" fill="white">L2 Cache (Shared)</text>
+    <text x="297" y="478" text-anchor="middle" font-size="9" fill="#fef3c7">4 KB · 4-way · 10-cycle</text>
+    <text x="297" y="489" text-anchor="middle" font-size="8" fill="#fde68a">shared across all 10 cores</text>
+  </g>
+
+  <!-- Main Memory -->
+  <g class="node-box" data-tip="<b>Main Memory</b><br/>Python dict-backed address space (65 536 byte-addressed words). L2 miss → fetch with 50-cycle penalty. Block is allocated into both L2 and L1 on return.">
+    <rect x="420" y="444" width="155" height="52" rx="7" fill="#78350f" opacity="0.9" stroke="#fcd34d" stroke-width="1.3"/>
+    <text x="497" y="464" text-anchor="middle" font-size="11" font-weight="700" fill="white">Main Memory</text>
+    <text x="497" y="478" text-anchor="middle" font-size="9" fill="#fef3c7">dict · 64 KB space</text>
+    <text x="497" y="489" text-anchor="middle" font-size="8" fill="#fde68a">50-cycle miss penalty</text>
+  </g>
+
+  <!-- AMAT formula -->
+  <g class="node-box" data-tip="<b>AMAT Formula</b><br/>AMAT = L1_hit_time + L1_miss_rate × (L2_hit_time + L2_miss_rate × mem_penalty)<br/>Example: 1 + 0.08×(10 + 0.17×50) ≈ 2.5 cycles">
+    <rect x="620" y="444" width="220" height="52" rx="7" fill="#6b3700" opacity="0.85" stroke="#fcd34d" stroke-width="1.3"/>
+    <text x="730" y="462" text-anchor="middle" font-size="10" font-weight="700" fill="#fef3c7">AMAT</text>
+    <text x="730" y="476" text-anchor="middle" font-size="8.5" fill="#fde68a">= t_L1 + m_L1×(t_L2 + m_L2×t_mem)</text>
+    <text x="730" y="489" text-anchor="middle" font-size="8" fill="#fef3c7">Typical: ~2.5 cycles (threaded)</text>
+  </g>
+
+  <!-- cache layer arrows -->
+  <line x1="180" y1="470" x2="218" y2="470" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#arr-amber)"/>
+  <line x1="375" y1="470" x2="418" y2="470" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#arr-amber)"/>
+  <text x="199" y="465" font-size="7.5" fill="#f59e0b" text-anchor="middle">miss→</text>
+  <text x="396" y="465" font-size="7.5" fill="#f59e0b" text-anchor="middle">miss→</text>
+
+  <!-- WB/MEM to L1 -->
+  <line x1="712" y1="268" x2="105" y2="444" stroke="#f59e0b" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arr-amber)" opacity="0.6"/>
+  <text x="410" y="380" font-size="8" fill="#f59e0b" opacity="0.7" text-anchor="middle">MEM→L1 read/write</text>
+
+  <!-- ═══════════════════════════════════════════════
+       LAYER 5 – METRICS / OUTPUT
+  ══════════════════════════════════════════════════ -->
+
+  <!-- performance.py -->
+  <g class="node-box" data-tip="<b>performance.py</b><br/>gather_metrics(): aggregates total_cycles, instructions, CPI, stalls, flushes, L1 hits/misses, L2 hits/misses, AMAT, per-core CPI/stalls/flushes.<br/>print_report(): formats and prints the full architecture report.">
+    <rect x="30" y="630" width="155" height="52" rx="7" fill="#9f1239" opacity="0.9" stroke="#fda4af" stroke-width="1.3"/>
+    <text x="107" y="650" text-anchor="middle" font-size="11" font-weight="700" fill="white">performance.py</text>
+    <text x="107" y="664" text-anchor="middle" font-size="9" fill="#ffe4e6">gather_metrics · print_report</text>
+    <text x="107" y="675" text-anchor="middle" font-size="8" fill="#fda4af">CPI · stalls · flushes · AMAT</text>
+  </g>
+
+  <!-- per-core output -->
+  <g class="node-box" data-tip="<b>Per-core output</b><br/>Each Core has core.output[] — list of PRINT'ed register values. Printed to terminal per core after all threads/processes join. Also: cycles, instructions, stalls, flushes.">
+    <rect x="220" y="630" width="155" height="52" rx="7" fill="#881337" opacity="0.9" stroke="#fda4af" stroke-width="1.3"/>
+    <text x="297" y="650" text-anchor="middle" font-size="11" font-weight="700" fill="white">Core Output</text>
+    <text x="297" y="664" text-anchor="middle" font-size="9" fill="#ffe4e6">core.output[] via PRINT</text>
+    <text x="297" y="675" text-anchor="middle" font-size="8" fill="#fda4af">cycles · instrs · stalls</text>
+  </g>
+
+  <!-- report output -->
+  <g class="node-box" data-tip="<b>Architecture Report (stdout)</b><br/>Prints: Critical-path cycles, total instructions, aggregate CPI, pipeline stalls/flushes, L1/L2 hit rates, AMAT, and per-core breakdown sorted by instruction count.">
+    <rect x="410" y="630" width="175" height="52" rx="7" fill="#7f1d1d" opacity="0.9" stroke="#fda4af" stroke-width="1.3"/>
+    <text x="497" y="650" text-anchor="middle" font-size="11" font-weight="700" fill="white">Architecture Report</text>
+    <text x="497" y="664" text-anchor="middle" font-size="9" fill="#ffe4e6">stdout — human readable</text>
+    <text x="497" y="675" text-anchor="middle" font-size="8" fill="#fda4af">10-core sorted breakdown</text>
+  </g>
+
+  <!-- report box -->
+  <g class="node-box" data-tip="<b>test_isa.py</b><br/>Unit regression tests: basic_alu, memory_ld_st (confirms load-use stall), stack_and_subroutines (CALL/RET), flags_and_branches (CMP/JL). Must all pass before running main.">
+    <rect x="630" y="630" width="155" height="52" rx="7" fill="#6b1919" opacity="0.85" stroke="#fda4af" stroke-width="1.3"/>
+    <text x="707" y="650" text-anchor="middle" font-size="11" font-weight="700" fill="white">test_isa.py</text>
+    <text x="707" y="664" text-anchor="middle" font-size="9" fill="#ffe4e6">4 regression tests</text>
+    <text x="707" y="675" text-anchor="middle" font-size="8" fill="#fda4af">ALU·Mem·Stack·Flags</text>
+  </g>
+
+  <!-- metrics arrows -->
+  <line x1="95" y1="350" x2="107" y2="628" stroke="#f43f5e" stroke-width="1.3" stroke-dasharray="4,3" marker-end="url(#arr-rose)" opacity="0.7"/>
+  <line x1="107" y1="682" x2="220" y2="682" stroke="#f43f5e" stroke-width="1.2" marker-end="url(#arr-rose)"/>
+  <line x1="375" y1="656" x2="408" y2="656" stroke="#f43f5e" stroke-width="1.2" marker-end="url(#arr-rose)"/>
+  <line x1="585" y1="656" x2="628" y2="656" stroke="#f43f5e" stroke-width="1.2" marker-end="url(#arr-rose)"/>
+
+  <!-- scheduler → pipeline flow (vertical) -->
+  <line x1="505" y1="58" x2="299" y2="156" stroke="#6366f1" stroke-width="1.3" stroke-dasharray="4,3" marker-end="url(#arr)" opacity="0.6"/>
+  <line x1="692" y1="58" x2="503" y2="218" stroke="#4338ca" stroke-width="1.3" stroke-dasharray="4,3" marker-end="url(#arr)" opacity="0.6"/>
+
+  <!-- demo_programs to scheduler -->
+  <line x1="277" y1="86" x2="430" y2="58" stroke="#10b981" stroke-width="1.2" stroke-dasharray="3,3" marker-end="url(#arr-green)" opacity="0.6"/>
+
+</svg>
+
+<script>
+  const tooltip = document.getElementById('tooltip');
+  document.querySelectorAll('[data-tip]').forEach(el => {
+    el.addEventListener('mousemove', e => {
+      tooltip.innerHTML = el.getAttribute('data-tip');
+      let x = e.clientX + 14, y = e.clientY - 10;
+      if (x + 290 > window.innerWidth) x = e.clientX - 300;
+      tooltip.style.left = x + 'px';
+      tooltip.style.top  = y + 'px';
+      tooltip.classList.add('visible');
+    });
+    el.addEventListener('mouseleave', () => tooltip.classList.remove('visible'));
+  });
+</script>
+</body>
+</html>
